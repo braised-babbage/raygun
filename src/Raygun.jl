@@ -81,7 +81,7 @@ end
 function color(ray::Ray, world::Hittable)
     record = hit(world, ray, 0.0, floatmax(Float64))
     if record !== nothing
-        return RGB(
+        return Vec3(
             (1+record.normal[1])/2, 
             (1+record.normal[2])/2, 
             (1+record.normal[3])/2
@@ -90,7 +90,34 @@ function color(ray::Ray, world::Hittable)
 
     unit_direction = unit_vector(ray.direction)
     t = 0.5*(unit_direction[2] + 1.0)
-    return weighted_color_mean(t, RGB(0.5,0.7,1.0), RGB(1.0, 1.0, 1.0))
+    return t*Vec3(0.5,0.7,1.0) + (1-t)*Vec3(1.0, 1.0, 1.0)
+end
+
+struct Camera
+    origin::Point3
+    lower_left_corner::Point3
+    vertical::Vec3
+    horizontal::Vec3
+end
+
+function Camera()
+    aspect_ratio = 16/9
+    viewport_height = 2.0
+    viewport_width = viewport_height*aspect_ratio
+    focal_length = 1.0
+
+    origin = Point3(0,0,0)
+    horizontal = Vec3(viewport_width,0,0)
+    vertical = Vec3(0,viewport_height,0)
+    lower_left_corner = origin - horizontal/2 - vertical/2 - Vec3(0,0,focal_length)
+    return Camera(origin, lower_left_corner, vertical, horizontal)
+end
+
+function get_ray(camera::Camera, u::Float64, v::Float64)
+    return Ray(
+        camera.origin, 
+        camera.lower_left_corner + u*camera.horizontal + v*camera.vertical - camera.origin
+        )
 end
 
 function render()
@@ -98,6 +125,7 @@ function render()
     aspect_ratio = 16/9
     width = 400
     height = convert(Int, width/aspect_ratio)
+    samples_per_pixel = 100
 
     # world
     world = HittableList([
@@ -106,21 +134,20 @@ function render()
         ])
     
     # camera
-    viewport_height = 2.0
-    viewport_width = viewport_height*aspect_ratio
-    focal_length = 1.0
-
-    origin = Point3(0,0,0)
-    horizontal = Vec3(viewport_width,0,0)
-    vertical = Vec3(0,viewport_height,0)
-    lower_left = origin - horizontal/2 - vertical/2 - Vec3(0,0,focal_length)
+    camera = Camera()
 
     img = Array{RGB, 2}(undef, height, width)
     for j in ProgressBar(1:height)
         for i in 1:width
-            u,v = i/width, (height-j)/height
-            ray = Ray(origin, lower_left + u*horizontal + v*vertical - origin)
-            img[j,i] = color(ray, world)
+            c = Vec3(0,0,0)
+            for s in 1:samples_per_pixel
+                u = (i+rand())/width
+                v = (height-j+rand())/height
+                ray = get_ray(camera, u, v)
+                c += color(ray, world)
+            end
+            c /= samples_per_pixel
+            img[j,i] = RGB(c[1],c[2],c[3])
         end
     end
     return img
