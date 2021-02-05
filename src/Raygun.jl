@@ -11,6 +11,11 @@ Point3 = SVector{3, Float64}
 norm2(vec::Vec3) = dot(vec, vec)
 unit_vector(vec::Vec3) = vec/sqrt(norm2(vec))
 
+function random_unit_vector()
+    vec = Vec3(randn(), randn(), randn())
+    return unit_vector(vec)
+end
+
 struct Ray
     origin::Point3
     direction::Vec3
@@ -78,14 +83,15 @@ function hit(list::HittableList, ray::Ray, tmin::Float64, tmax::Float64)
 end
 
 
-function color(ray::Ray, world::Hittable)
-    record = hit(world, ray, 0.0, floatmax(Float64))
+function color(ray::Ray, world::Hittable, depth::Int)
+    if (depth <= 0)
+        return Vec3(0,0,0)
+    end
+
+    record = hit(world, ray, 0.001, floatmax(Float64))
     if record !== nothing
-        return Vec3(
-            (1+record.normal[1])/2, 
-            (1+record.normal[2])/2, 
-            (1+record.normal[3])/2
-        )
+        target = record.p + record.normal + random_unit_vector()
+        return 0.5*color(Ray(record.p,target), world, depth-1)
     end
 
     unit_direction = unit_vector(ray.direction)
@@ -120,12 +126,16 @@ function get_ray(camera::Camera, u::Float64, v::Float64)
         )
 end
 
-function render()
+function rgb_color(combined::Vec3, samples_per_pixel::Int)
+    corrected = sqrt.(combined/samples_per_pixel)
+    return RGB(corrected...)
+end
+
+function render(samples_per_pixel=100)
     # image
     aspect_ratio = 16/9
     width = 400
     height = convert(Int, width/aspect_ratio)
-    samples_per_pixel = 100
 
     # world
     world = HittableList([
@@ -136,6 +146,8 @@ function render()
     # camera
     camera = Camera()
 
+    max_depth = 50
+
     img = Array{RGB, 2}(undef, height, width)
     for j in ProgressBar(1:height)
         for i in 1:width
@@ -144,10 +156,9 @@ function render()
                 u = (i+rand())/width
                 v = (height-j+rand())/height
                 ray = get_ray(camera, u, v)
-                c += color(ray, world)
+                c += color(ray, world, max_depth)
             end
-            c /= samples_per_pixel
-            img[j,i] = RGB(c[1],c[2],c[3])
+            img[j,i] = rgb_color(c, samples_per_pixel)
         end
     end
     return img
