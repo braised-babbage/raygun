@@ -11,7 +11,7 @@ Point3 = SVector{3, Float64}
 norm2(vec::Vec3) = dot(vec, vec)
 unit_vector(vec::Vec3) = vec/sqrt(norm2(vec))
 
-function random_unit_vector()
+@inline function random_unit_vector()
     vec = Vec3(randn(), randn(), randn())
     return unit_vector(vec)
 end
@@ -96,7 +96,7 @@ function color(ray::Ray, world::Hittable, depth::Int)
 
     unit_direction = unit_vector(ray.direction)
     t = 0.5*(unit_direction[2] + 1.0)
-    return t*Vec3(0.5,0.7,1.0) + (1-t)*Vec3(1.0, 1.0, 1.0)
+    return Vec3(1-0.5t,1-0.3t,1.0)
 end
 
 struct Camera
@@ -119,14 +119,14 @@ function Camera()
     return Camera(origin, lower_left_corner, vertical, horizontal)
 end
 
-function get_ray(camera::Camera, u::Float64, v::Float64)
+@inline function get_ray(camera::Camera, u::Float64, v::Float64)
     return Ray(
         camera.origin, 
         camera.lower_left_corner + u*camera.horizontal + v*camera.vertical - camera.origin
         )
 end
 
-function rgb_color(combined::Vec3, samples_per_pixel::Int)
+@inline function rgb_color(combined::Vec3, samples_per_pixel::Int)
     corrected = sqrt.(combined/samples_per_pixel)
     return RGB(corrected...)
 end
@@ -147,10 +147,10 @@ function render(samples_per_pixel=100)
     camera = Camera()
 
     max_depth = 50
-
+    
     img = Array{RGB, 2}(undef, height, width)
-    for j in ProgressBar(1:height)
-        for i in 1:width
+    for i in ProgressBar(1:width)
+        for j in 1:height
             c = Vec3(0,0,0)
             for s in 1:samples_per_pixel
                 u = (i+rand())/width
