@@ -10,6 +10,7 @@ Point3 = SVector{3, Float64}
 
 norm2(vec::Vec3) = dot(vec, vec)
 unit_vector(vec::Vec3) = vec/sqrt(norm2(vec))
+reflect(v::Vec3, n::Vec3) = v - 2*dot(v,n)*n
 
 @inline function random_unit_vector()
     vec = Vec3(randn(), randn(), randn())
@@ -23,19 +24,47 @@ end
 
 position(ray::Ray, t::Float64) = ray.origin + t*ray.direction
 
+abstract type Hittable end
+abstract type Material end
 
 struct HitRecord
     p::Point3
     normal::Vec3
+    material::Material
     t::Float64
     front_face::Bool
 end
 
-abstract type Hittable end
+struct Lambertian <: Material
+    albedo::Vec3
+end
+Lambertian(r::Float64, g::Float64, b::Float64) = Lambertian(Vec3(r,g,b))
+
+function scatter(mat::Lambertian, ray::Ray, rec::HitRecord)
+    scatter_dir = rec.normal + random_unit_vector()
+    scattered = Ray(rec.p, scatter_dir)
+    attenuation = mat.albedo
+    return (scattered, attenuation)
+end
+
+
+struct Metal <: Material
+    albedo::Vec3
+    fuzz::Float64
+end
+Metal(r::Float64, g::Float64, b::Float64, fuzz::Float64) = Metal(Vec3(r,g,b), fuzz)
+
+function scatter(mat::Metal, ray::Ray, rec::HitRecord)
+    reflected = reflect(unit_vector(ray.direction), rec.normal)
+    scattered = Ray(rec.p, reflected + mat.fuzz*random_unit_vector())
+    attenuation = mat.albedo
+    return (scattered, attenuation)
+end
 
 struct Sphere <: Hittable
     center::Point3
     radius::Float64
+    material::Material
 end
 
 struct HittableList <: Hittable
@@ -67,7 +96,7 @@ function hit(sphere::Sphere, ray::Ray, tmin::Float64, tmax::Float64)
     out_normal = (p - sphere.center) / sphere.radius
     front_face = dot(ray.direction, out_normal) < 0
     normal = front_face ? out_normal : -out_normal
-    return HitRecord(p, normal, t, front_face)
+    return HitRecord(p, normal, sphere.material, t, front_face)
 end
 
 function hit(list::HittableList, ray::Ray, tmin::Float64, tmax::Float64)
@@ -90,8 +119,8 @@ function color(ray::Ray, world::Hittable, depth::Int)
 
     record = hit(world, ray, 0.001, floatmax(Float64))
     if record !== nothing
-        target = record.p + record.normal + random_unit_vector()
-        return 0.5*color(Ray(record.p,target), world, depth-1)
+        scattered, attenuation = scatter(record.material, ray, record)
+        return attenuation .* color(scattered, world, depth-1)
     end
 
     unit_direction = unit_vector(ray.direction)
@@ -139,8 +168,10 @@ function render(samples_per_pixel=100)
 
     # world
     world = HittableList([
-        Sphere(Point3(0,0,-1), 0.5),
-        Sphere(Point3(0,-100.5,-1), 100)
+        Sphere(Point3(0,0,-1), 0.5, Lambertian(0.7,0.3,0.3)),
+        Sphere(Point3(0,-100.5,-1), 100, Lambertian(0.8,0.8,0.0)),
+        Sphere(Point3(-1,0,-1), 0.5, Metal(0.8,0.8,0.8, 0.3)),
+        Sphere(Point3(1,0,-1),0.5, Metal(0.8,0.6,0.2, 0.8))
         ])
     
     # camera
